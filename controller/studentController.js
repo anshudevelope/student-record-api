@@ -1,5 +1,6 @@
 const Student = require('../model/studentModel.js');
-
+const fs = require('fs')
+const path = require('path')
 
 // Get all students
 const getStudents = async (req, res) => {
@@ -31,7 +32,13 @@ const getStudentById = async (req, res) => {
 const createStudent = async (req, res) => {
     try {
         const studentData = req.body;
-        const newStudent = await Student.create(studentData);
+        const file = req.file;
+        // const newStudent = await Student.create(studentData);
+        const newStudent = new Student(studentData);
+        if (file) {
+            newStudent.profilePic = file.filename;
+        }
+        await newStudent.save();
         res.status(201).json({ success: true, data: newStudent, message: "Student created successfully" });
     } catch (error) {
         console.log(error.message, "error creating student");
@@ -44,6 +51,32 @@ const updateStudentById = async (req, res) => {
     try {
         const { id } = req.params;
         const studentData = req.body;
+
+        const file = req.file;
+
+        const existingStudent = await Student.findById(id);
+
+        if (!existingStudent) {
+            if (file.filename) {
+                const filePath = path.join('./uploads', file.filename);
+                fs.unlink(filePath, (err) => {
+                    if (err) console.log('Failed to delete image: ', err)
+                })
+            }
+            return res.status(404).json({ success: false, message: "Student not found" });
+        }
+
+        if (file) {
+            if (existingStudent.profilePic) {
+                const oldFilePath = path.join('./uploads', existingStudent.profilePic);
+                fs.unlink(oldFilePath, (err) => {
+                    if (err) console.log('Failed to delete old image: ', err)
+                })
+            }
+            studentData.profilePic = file.filename;
+        }
+
+
         const updatedStudent = await Student.findByIdAndUpdate(id, studentData, { new: true });
         if (!updatedStudent) {
             return res.status(404).json({ success: false, message: "Student not found" });
@@ -62,6 +95,12 @@ const deleteStudentById = async (req, res) => {
         const deletedStudent = await Student.findByIdAndDelete(id);
         if (!deletedStudent) {
             return res.status(404).json({ success: false, message: "Student not found" });
+        }
+        if (deletedStudent.profilePic) {
+            const filePath = path.join('./uploads', deletedStudent.profilePic);
+            fs.unlink(filePath, (err) => {
+                if (err) console.log('Failed to delete: ', err)
+            })
         }
         res.status(200).json({ success: true, data: deletedStudent, message: "Student deleted successfully" });
     } catch (error) {
